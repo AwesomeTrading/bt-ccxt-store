@@ -34,15 +34,14 @@ from ccxt.base.errors import NetworkError, ExchangeError
 
 class MetaSingleton(MetaParams):
     '''Metaclass to make a metaclassed class a singleton'''
-
     def __init__(cls, name, bases, dct):
         super(MetaSingleton, cls).__init__(name, bases, dct)
         cls._singleton = None
 
     def __call__(cls, *args, **kwargs):
         if cls._singleton is None:
-            cls._singleton = (
-                super(MetaSingleton, cls).__call__(*args, **kwargs))
+            cls._singleton = (super(MetaSingleton,
+                                    cls).__call__(*args, **kwargs))
 
         return cls._singleton
 
@@ -95,7 +94,13 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
         '''Returns broker with *args, **kwargs from registered ``BrokerCls``'''
         return cls.BrokerCls(*args, **kwargs)
 
-    def __init__(self, exchange, currency, config, retries, debug=False, sandbox=False):
+    def __init__(self,
+                 exchange,
+                 currency,
+                 config,
+                 retries,
+                 debug=False,
+                 sandbox=False):
         self.exchange = getattr(ccxt, exchange)(config)
         if sandbox:
             self.exchange.set_sandbox_mode(True)
@@ -104,12 +109,12 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
         self.debug = debug
         balance = self.exchange.fetch_balance() if 'secret' in config else 0
 
-        if balance == 0 or not balance['free'][currency]:
+        if balance == 0 or not balance['free'].get(currency, 0):
             self._cash = 0
         else:
             self._cash = balance['free'][currency]
 
-        if balance == 0 or not balance['total'][currency]:
+        if balance == 0 or not balance['total'].get(currency, 0):
             self._value = 0
         else:
             self._value = balance['total'][currency]
@@ -126,8 +131,9 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
                              (bt.TimeFrame.getname(timeframe), compression))
 
         if self.exchange.timeframes and granularity not in self.exchange.timeframes:
-            raise ValueError("'%s' exchange doesn't support fetching OHLCV data for "
-                             "%s time frame" % (self.exchange.name, granularity))
+            raise ValueError(
+                "'%s' exchange doesn't support fetching OHLCV data for "
+                "%s time frame" % (self.exchange.name, granularity))
 
         return granularity
 
@@ -136,7 +142,8 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
         def retry_method(self, *args, **kwargs):
             for i in range(self.retries):
                 if self.debug:
-                    print('{} - {} - Attempt {}'.format(datetime.now(), method.__name__, i))
+                    print('{} - {} - Attempt {}'.format(
+                        datetime.now(), method.__name__, i))
                 time.sleep(self.exchange.rateLimit / 1000)
                 try:
                     return method(self, *args, **kwargs)
@@ -169,8 +176,12 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
     @retry
     def create_order(self, symbol, order_type, side, amount, price, params):
         # returns the order
-        return self.exchange.create_order(symbol=symbol, type=order_type, side=side,
-                                          amount=amount, price=price, params=params)
+        return self.exchange.create_order(symbol=symbol,
+                                          type=order_type,
+                                          side=side,
+                                          amount=amount,
+                                          price=price,
+                                          params=params)
 
     @retry
     def cancel_order(self, order_id, symbol):
@@ -183,8 +194,13 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
     @retry
     def fetch_ohlcv(self, symbol, timeframe, since, limit, params={}):
         if self.debug:
-            print('Fetching: {}, TF: {}, Since: {}, Limit: {}'.format(symbol, timeframe, since, limit))
-        return self.exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit, params=params)
+            print('Fetching: {}, TF: {}, Since: {}, Limit: {}'.format(
+                symbol, timeframe, since, limit))
+        return self.exchange.fetch_ohlcv(symbol,
+                                         timeframe=timeframe,
+                                         since=since,
+                                         limit=limit,
+                                         params=params)
 
     @retry
     def fetch_order(self, oid, symbol):
