@@ -71,7 +71,7 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
         ('fetch_ohlcv_params', {}),
         ('ohlcv_limit', 20),
         ('drop_newest', False),
-        ('debug', False)
+        ('debug', False),
     )
 
     _store = CCXTStore
@@ -93,7 +93,7 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
         if self.p.fromdate:
             self._state = self._ST_HISTORBACK
             self.put_notification(self.DELAYED)
-            self._fetch_ohlcv(self.p.fromdate)
+            self._fetch_ohlcv(self.p.fromdate, self.p.todate)
 
         else:
             self._state = self._ST_LIVE
@@ -112,7 +112,8 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
                     ret = self._load_ohlcv()
                     if self.p.debug:
                         print('----     LOAD    ----')
-                        print('{} Load OHLCV Returning: {}'.format(datetime.utcnow(), ret))
+                        print('{} Load OHLCV Returning: {}'.format(
+                            datetime.utcnow(), ret))
                     return ret
 
             elif self._state == self._ST_HISTORBACK:
@@ -130,17 +131,24 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
                         self.put_notification(self.LIVE)
                         continue
 
-    def _fetch_ohlcv(self, fromdate=None):
+    def _fetch_ohlcv(self, fromdate=None, todate=None):
         """Fetch OHLCV data into self._data queue"""
-        granularity = self.store.get_granularity(self._timeframe, self._compression)
+        granularity = self.store.get_granularity(self._timeframe,
+                                                 self._compression)
 
         if fromdate:
-            since = int((fromdate - datetime(1970, 1, 1)).total_seconds() * 1000)
+            since = int(
+                (fromdate - datetime(1970, 1, 1)).total_seconds() * 1000)
         else:
             if self._last_ts > 0:
                 since = self._last_ts
             else:
                 since = None
+
+        if todate:
+            enddt = int((todate - datetime(1970, 1, 1)).total_seconds() * 1000)
+        else:
+            enddt = 0
 
         limit = self.p.ohlcv_limit
 
@@ -149,26 +157,38 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
 
             if self.p.debug:
                 # TESTING
-                since_dt = datetime.utcfromtimestamp(since // 1000) if since is not None else 'NA'
+                since_dt = datetime.utcfromtimestamp(
+                    since // 1000) if since is not None else 'NA'
                 print('---- NEW REQUEST ----')
-                print('{} - Requesting: Since TS {} Since date {} granularity {}, limit {}, params'.format(
-                    datetime.utcnow(), since, since_dt, granularity, limit, self.p.fetch_ohlcv_params))
-                data = sorted(self.store.fetch_ohlcv(self.p.dataname, timeframe=granularity,
-                                                     since=since, limit=limit, params=self.p.fetch_ohlcv_params))
+                print(
+                    '{} - Requesting: Since TS {} Since date {} granularity {}, limit {}, params'
+                    .format(datetime.utcnow(), since, since_dt, granularity,
+                            limit, self.p.fetch_ohlcv_params))
+                data = sorted(
+                    self.store.fetch_ohlcv(self.p.dataname,
+                                           timeframe=granularity,
+                                           since=since,
+                                           limit=limit,
+                                           params=self.p.fetch_ohlcv_params))
                 try:
                     for i, ohlcv in enumerate(data):
                         tstamp, open_, high, low, close, volume = ohlcv
-                        print('{} - Data {}: {} - TS {} Time {}'.format(datetime.utcnow(), i,
-                                                                        datetime.utcfromtimestamp(tstamp // 1000),
-                                                                        tstamp, (time.time() * 1000)))
+                        print('{} - Data {}: {} - TS {} Time {}'.format(
+                            datetime.utcnow(), i,
+                            datetime.utcfromtimestamp(tstamp // 1000), tstamp,
+                            (time.time() * 1000)))
                         # ------------------------------------------------------------------
                 except IndexError:
                     print('Index Error: Data = {}'.format(data))
                 print('---- REQUEST END ----')
             else:
 
-                data = sorted(self.store.fetch_ohlcv(self.p.dataname, timeframe=granularity,
-                                                     since=since, limit=limit, params=self.p.fetch_ohlcv_params))
+                data = sorted(
+                    self.store.fetch_ohlcv(self.p.dataname,
+                                           timeframe=granularity,
+                                           since=since,
+                                           limit=limit,
+                                           params=self.p.fetch_ohlcv_params))
 
             # Check to see if dropping the latest candle will help with
             # exchanges which return partial data
@@ -195,6 +215,12 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
                     self._data.append(ohlcv)
                     self._last_ts = tstamp
 
+            if enddt > 0:
+                if self._last_ts >= enddt:
+                    break
+                since = self._last_ts
+                continue
+
             if dlen == len(self._data):
                 break
 
@@ -209,8 +235,10 @@ class CCXTFeed(with_metaclass(MetaCCXTFeed, DataBase)):
             trade_id = trade['id']
 
             if trade_id > self._last_id:
-                trade_time = datetime.strptime(trade['datetime'], '%Y-%m-%dT%H:%M:%S.%fZ')
-                self._data.append((trade_time, float(trade['price']), float(trade['amount'])))
+                trade_time = datetime.strptime(trade['datetime'],
+                                               '%Y-%m-%dT%H:%M:%S.%fZ')
+                self._data.append((trade_time, float(trade['price']),
+                                   float(trade['amount'])))
                 self._last_id = trade_id
 
         try:
