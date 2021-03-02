@@ -167,6 +167,7 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
         # Fix if None is returned
         self._cash = cash if cash else 0
         self._value = value if value else 0
+        return cash, value
 
     @retry
     def getposition(self):
@@ -192,7 +193,14 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
         return self.exchange.fetch_trades(symbol)
 
     @retry
-    def fetch_ohlcv(self, symbol, timeframe, since, limit, params={}):
+    def fetch_ohlcv(
+        self,
+        symbol,
+        timeframe,
+        since=None,
+        limit=None,
+        params={},
+    ):
         if self.debug:
             print('Fetching: {}, TF: {}, Since: {}, Limit: {}'.format(
                 symbol, timeframe, since, limit))
@@ -208,8 +216,23 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
 
     @retry
     def fetch_open_orders(self):
-        return self.exchange.fetchOpenOrders()
+        return self.exchange.fetch_open_orders()
 
+    # exchange information
+    @retry
+    def get_time(self):
+        return self.exchange.fetch_time()
+
+    @retry
+    def get_tickers(self, symbols):
+        return self.exchange.fetch_tickers(symbols)
+
+    @retry
+    def get_markets(self):
+        self.exchange.load_markets()
+        return self.exchange.markets_by_id
+
+    # extends
     @retry
     def private_end_point(self, type, endpoint, params):
         '''
