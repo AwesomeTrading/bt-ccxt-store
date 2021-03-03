@@ -189,8 +189,32 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
         return self.exchange.cancel_order(order_id, symbol)
 
     @retry
-    def fetch_trades(self, symbol):
-        return self.exchange.fetch_trades(symbol)
+    def cancel_all_orders(self, symbol=None, params={}):
+        return self.exchange.cancel_all_orders(symbol, params)
+
+    @retry
+    def fetch_order(self, oid, symbol):
+        return self.exchange.fetch_order(oid, symbol)
+
+    @retry
+    def fetch_orders(self, symbol=None, since=None, limit=None, params={}):
+        return self.exchange.fetch_orders(symbol, since, limit, params)
+
+    @retry
+    def fetch_open_orders(self,
+                          symbol=None,
+                          since=None,
+                          limit=None,
+                          params={}):
+        return self.exchange.fetch_open_orders(symbol, since, limit, params)
+
+    @retry
+    def fetch_trades(self, symbol, since=None, limit=None, params={}):
+        return self.exchange.fetch_trades(symbol, since, limit, params)
+
+    @retry
+    def fetch_positions(self, symbols=None, since=None, limit=None, params={}):
+        return self.exchange.fetch_positions(symbols, since, limit, params)
 
     @retry
     def fetch_ohlcv(
@@ -209,14 +233,6 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
                                          since=since,
                                          limit=limit,
                                          params=params)
-
-    @retry
-    def fetch_order(self, oid, symbol):
-        return self.exchange.fetch_order(oid, symbol)
-
-    @retry
-    def fetch_open_orders(self):
-        return self.exchange.fetch_open_orders()
 
     # exchange information
     @retry
