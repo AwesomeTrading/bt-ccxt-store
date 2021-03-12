@@ -214,7 +214,17 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
 
     @retry
     def fetch_positions(self, symbols=None, since=None, limit=None, params={}):
-        return self.exchange.fetch_positions(symbols, since, limit, params)
+        positions = self.exchange.fetch_positions(symbols, since, limit,
+                                                  params)
+        if symbols is None:
+            return positions
+
+        response = []
+        for position in positions:
+            psymbol = self.exchange.safe_symbol(position['symbol'])
+            if psymbol in symbols:
+                response.append(position)
+        return response
 
     @retry
     def fetch_ohlcv(
