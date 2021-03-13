@@ -22,6 +22,7 @@ from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
 import time
+import json
 from datetime import datetime
 from functools import wraps
 
@@ -190,6 +191,9 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
 
     @retry
     def cancel_all_orders(self, symbol=None, params={}):
+        if 'origClientOrderIdList' in params:
+            params['origClientOrderIdList'] = json.dumps(
+                params['origClientOrderIdList'], separators=(",", ":"))
         return self.exchange.cancel_all_orders(symbol, params)
 
     @retry
