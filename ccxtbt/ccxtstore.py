@@ -58,7 +58,7 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
     '''
 
     # Supported granularities
-    _GRANULARITIES = {
+    _TIMEFRAME_L2E = {
         (bt.TimeFrame.Minutes, 1): '1m',
         (bt.TimeFrame.Minutes, 3): '3m',
         (bt.TimeFrame.Minutes, 5): '5m',
@@ -81,6 +81,7 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
         (bt.TimeFrame.Months, 6): '6M',
         (bt.TimeFrame.Years, 1): '1y',
     }
+    _TIMEFRAME_E2L = {v: k for k, v in _TIMEFRAME_L2E.items()}
 
     BrokerCls = None  # broker class will auto register
     DataCls = None  # data class will auto register
@@ -120,23 +121,25 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
         else:
             self._value = balance['total'][currency]
 
-    def get_granularity(self, timeframe, compression):
-        if not self.exchange.has['fetchOHLCV']:
-            raise NotImplementedError("'%s' exchange doesn't support fetching OHLCV data" % \
-                                      self.exchange.name)
-
-        granularity = self._GRANULARITIES.get((timeframe, compression))
-        if granularity is None:
-            raise ValueError("backtrader CCXT module doesn't support fetching OHLCV "
-                             "data for time frame %s, comression %s" % \
+    def get_exchange_timeframe(self, timeframe, compression):
+        tf = self._TIMEFRAME_L2E.get((timeframe, compression))
+        if tf is None:
+            raise ValueError("backtrader CCXT module doesn't support timeframe %s, comression %s" % \
                              (bt.TimeFrame.getname(timeframe), compression))
 
-        if self.exchange.timeframes and granularity not in self.exchange.timeframes:
-            raise ValueError(
-                "'%s' exchange doesn't support fetching OHLCV data for "
-                "%s time frame" % (self.exchange.name, granularity))
+        if self.exchange.timeframes and tf not in self.exchange.timeframes:
+            raise ValueError("'%s' exchange doesn't support %s time frame" %
+                             (self.exchange.name, tf))
 
-        return granularity
+        return tf
+
+    def get_local_timeframe(self, timeframe):
+        tf, comp = self._TIMEFRAME_E2L.get(timeframe)
+        if tf is None:
+            raise ValueError(
+                "backtrader CCXT module doesn't support timeframe %s" %
+                timeframe)
+        return tf
 
     def retry(method):
         @wraps(method)
@@ -154,82 +157,13 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
 
         return retry_method
 
-    @retry
-    def get_wallet_balance(self, currency, params=None):
-        balance = self.exchange.fetch_balance(params)
-        return balance
-
-    @retry
-    def get_balance(self):
-        balance = self.exchange.fetch_balance()
-
-        cash = balance['free'][self.currency]
-        value = balance['total'][self.currency]
-        # Fix if None is returned
-        self._cash = cash if cash else 0
-        self._value = value if value else 0
-        return cash, value
-
+    # temporary
     @retry
     def getposition(self):
         return self._value
         # return self.getvalue(currency)
 
-    @retry
-    def create_order(self, symbol, order_type, side, amount, price, params):
-        # returns the order
-        return self.exchange.create_order(symbol=symbol,
-                                          type=order_type,
-                                          side=side,
-                                          amount=amount,
-                                          price=price,
-                                          params=params)
-
-    @retry
-    def cancel_order(self, order_id, symbol):
-        return self.exchange.cancel_order(order_id, symbol)
-
-    @retry
-    def cancel_all_orders(self, symbol=None, params={}):
-        if 'origClientOrderIdList' in params:
-            params['origClientOrderIdList'] = json.dumps(
-                params['origClientOrderIdList'], separators=(",", ":"))
-        return self.exchange.cancel_all_orders(symbol, params)
-
-    @retry
-    def fetch_order(self, oid, symbol):
-        return self.exchange.fetch_order(oid, symbol)
-
-    @retry
-    def fetch_orders(self, symbol=None, since=None, limit=None, params={}):
-        return self.exchange.fetch_orders(symbol, since, limit, params)
-
-    @retry
-    def fetch_open_orders(self,
-                          symbol=None,
-                          since=None,
-                          limit=None,
-                          params={}):
-        return self.exchange.fetch_open_orders(symbol, since, limit, params)
-
-    @retry
-    def fetch_trades(self, symbol, since=None, limit=None, params={}):
-        return self.exchange.fetch_trades(symbol, since, limit, params)
-
-    @retry
-    def fetch_positions(self, symbols=None, since=None, limit=None, params={}):
-        positions = self.exchange.fetch_positions(symbols, since, limit,
-                                                  params)
-        if symbols is None:
-            return positions
-
-        response = []
-        for position in positions:
-            psymbol = self.exchange.safe_symbol(position['symbol'])
-            if psymbol in symbols:
-                response.append(position)
-        return response
-
+    # exchange information
     @retry
     def fetch_ohlcv(
         self,
@@ -248,7 +182,10 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
                                          limit=limit,
                                          params=params)
 
-    # exchange information
+    @retry
+    def fetch_trades(self, symbol, since=None, limit=None, params={}):
+        return self.exchange.fetch_trades(symbol, since, limit, params)
+
     @retry
     def get_time(self):
         return self.exchange.fetch_time()
@@ -261,6 +198,82 @@ class CCXTStore(with_metaclass(MetaSingleton, object)):
     def get_markets(self):
         self.exchange.load_markets()
         return self.exchange.markets_by_id
+
+    # account api
+    @retry
+    def get_my_wallet_balance(self, currency, params=None):
+        balance = self.exchange.fetch_balance(params)
+        return balance
+
+    @retry
+    def get_my_balance(self):
+        balance = self.exchange.fetch_balance()
+
+        cash = balance['free'][self.currency]
+        value = balance['total'][self.currency]
+        # Fix if None is returned
+        self._cash = cash if cash else 0
+        self._value = value if value else 0
+        return cash, value
+
+    @retry
+    def create_my_order(self, symbol, order_type, side, amount, price, params):
+        # returns the order
+        return self.exchange.create_order(symbol=symbol,
+                                          type=order_type,
+                                          side=side,
+                                          amount=amount,
+                                          price=price,
+                                          params=params)
+
+    @retry
+    def fetch_my_order(self, oid, symbol):
+        return self.exchange.fetch_order(oid, symbol)
+
+    @retry
+    def fetch_my_orders(self, symbol=None, since=None, limit=None, params={}):
+        return self.exchange.fetch_orders(symbol, since, limit, params)
+
+    @retry
+    def fetch_my_open_orders(self,
+                             symbol=None,
+                             since=None,
+                             limit=None,
+                             params={}):
+        return self.exchange.fetch_open_orders(symbol, since, limit, params)
+
+    @retry
+    def cancel_my_order(self, order_id, symbol):
+        return self.exchange.cancel_order(order_id, symbol)
+
+    @retry
+    def cancel_my_orders(self, symbol=None, params={}):
+        if 'origClientOrderIdList' in params:
+            params['origClientOrderIdList'] = json.dumps(
+                params['origClientOrderIdList'], separators=(",", ":"))
+        return self.exchange.cancel_all_orders(symbol, params)
+
+    @retry
+    def fetch_my_trades(self, symbol=None, since=None, limit=None, params={}):
+        return self.exchange.fetch_my_trades(symbol, since, limit, params)
+
+    @retry
+    def fetch_my_positions(self,
+                           symbols=None,
+                           since=None,
+                           limit=None,
+                           params={}):
+        positions = self.exchange.fetch_positions(symbols, since, limit,
+                                                  params)
+        if symbols is None:
+            return positions
+
+        response = []
+        for position in positions:
+            psymbol = self.exchange.safe_symbol(position['symbol'])
+            if psymbol in symbols:
+                response.append(position)
+        return response
 
     # extends
     @retry
